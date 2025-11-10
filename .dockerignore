@@ -1,0 +1,28 @@
+# Ignore node_modules to avoid copying unnecessary dependencies
+node_modules
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore environment files (for security reasons)
+.env
+.env.*
+
+# Ignore build artifacts
+dist/
+build/
+
+# Ignore Git-related files
+.git
+.gitignore
+
+# Ignore Docker-related files
+.dockerignore
+Dockerfile
+
+# Ignore editor and OS-specific files
+*.swp
+*.DS_Store
+Thumbs.db
+.vscode/
