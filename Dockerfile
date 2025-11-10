@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Instala as dependências (incluindo as de desenvolvimento para o build)
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 
 # Copia o restante do código fonte
 COPY . .
@@ -31,7 +31,7 @@ COPY docker-config.json ./etc/docker.json
 
 # Instala dependências de produção
 USER root
-RUN npm install --omit=dev
+RUN npm install --omit=dev --ignore-scripts
 USER pptruser
 
 # Expõe a porta padrão
