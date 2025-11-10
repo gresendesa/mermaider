@@ -158,3 +158,85 @@ Example sessions using Github Copilot in VSCode:
 ### License
 
 [MIT](LICENSE)
+
+
+# Test Script for `mermaider` MCP Server
+
+This is a simple shell script that tests the `mermaider` MCP server by connecting to its SSE endpoint, initializing the MCP protocol, and sending both valid and invalid Mermaid diagrams for syntax validation.
+Use a container on the same Docker network as the `mermaider` server to run this script.
+```sh
+#!/bin/sh
+
+# Configurações
+TARGET="http://mermaider:3000"
+SSE_LOG="/tmp/sse.log"
+
+# Limpa logs antigos
+rm -f $SSE_LOG
+
+echo ">>> [1/4] Iniciando conexão SSE..."
+# Inicia o curl em background, sem buffer (-N), salvando no log
+curl -N -s "$TARGET/sse" > $SSE_LOG &
+CURL_PID=$!
+
+# Dá um tempo para o servidor responder com o evento 'endpoint'
+sleep 2
+
+# Extrai a URL de postagem do log SSE.
+# O servidor mandou: data: /messages?sessionId=...
+# Nós precisamos pegar essa parte para saber onde enviar os POSTs.
+ENDPOINT_PATH=$(grep "data: " $SSE_LOG | grep "/messages" | head -n 1 | sed 's/^data: //')
+
+# Remove possíveis caracteres de quebra de linha invisíveis (\r)
+ENDPOINT_PATH=$(echo "$ENDPOINT_PATH" | tr -d '\r')
+
+if [ -z "$ENDPOINT_PATH" ]; then
+    echo "ERRO: Não foi possível obter o endpoint de mensagens do SSE."
+    echo "Conteúdo atual do log SSE:"
+    cat $SSE_LOG
+    kill $CURL_PID
+    exit 1
+fi
+
+FULL_ENDPOINT="${TARGET}${ENDPOINT_PATH}"
+echo ">>> Endpoint para mensagens identificado: $FULL_ENDPOINT"
+
+# Função auxiliar para enviar JSON-RPC
+send_msg() {
+    curl -s -X POST "$FULL_ENDPOINT" \
+         -H "Content-Type: application/json" \
+         -d "$1" >/dev/null
+}
+
+echo "\n>>> [2/4] Inicializando protocolo MCP..."
+# 1. Initialize
+send_msg '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"container-test","version":"1.0"}}}'
+sleep 1
+# 2. Initialized Notification
+send_msg '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+sleep 1
+
+echo "\n>>> [3/4] Executando testes de validação..."
+echo " Enviando diagrama VÁLIDO..."
+send_msg '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"validate_syntax","arguments":{"diagram_code":"graph TD;\nA-->B;"}}}'
+sleep 2
+
+echo " Enviando diagrama INVÁLIDO..."
+send_msg '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"validate_syntax","arguments":{"diagram_code":"graph TD;\nTHIS IS BROKEN"}}}'
+sleep 2
+
+echo "\n>>> [4/4] Resultados (Log SSE):"
+echo "---------------------------------------------------"
+cat $SSE_LOG
+echo "---------------------------------------------------"
+
+# Verifica se tivemos sucesso
+if grep -q "THIS IS BROKEN" $SSE_LOG && grep -q "Syntax error" $SSE_LOG; then
+    echo "SUCESSO: O servidor detectou o erro de sintaxe corretamente!"
+else
+    echo "FALHA: Não foi possível confirmar a validação nos logs."
+fi
+
+# Limpeza
+kill $CURL_PID
+```
