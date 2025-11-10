@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  mermaider:
+    build: .
+    image: mermaider-mcp
+    container_name: mermaider
+    restart: unless-stopped
+    networks:
+      - mcp-network
+    expose:
+      - "3000"
+    environment:
+      - PORT=3000
+    cap_add:
+      - SYS_ADMIN
+    init: true
+    volumes:
+       - ./docker-config.json:/app/etc/docker.json:ro
+    networks:
+      - mcp_servers
+
+networks:
+  mcp_servers:
+    external: true

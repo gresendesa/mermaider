@@ -39,7 +39,8 @@
     "inspect-bin": "bunx @modelcontextprotocol/inspector node ./bin/index.js etc/Firefox.json"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/express": "^5.0.5"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -47,6 +48,7 @@
   "dependencies": {
     "@mermaid-js/mermaid-zenuml": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^5.1.0",
     "mermaid": "^11.6.0",
     "puppeteer-core": "^24.9.0"
   }

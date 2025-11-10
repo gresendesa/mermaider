@@ -1,6 +1,7 @@
 import process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
 import type { Page } from "puppeteer-core";
 import { z } from "zod";
 import pkg from "../package.json" with { type: "json" };
@@ -15,12 +16,7 @@ export default async function run(page: Page): Promise<void> {
 
   server.tool(
     "validate_syntax",
-    `
-    Validates Mermaid diagram syntax.
-
-    Returns:
-    - Empty content result on success.
-    - Tool call returns error result with error message in content.`,
+    `Validates Mermaid diagram syntax.`,
     {
       diagram_code: z.string().describe("Mermaid diagram code"),
     },
@@ -29,35 +25,37 @@ export default async function run(page: Page): Promise<void> {
       const isError = typeof result === "string";
       return {
         isError,
-        content: [
-          {
-            type: "text",
-            text: isError ? result : "",
-          },
-        ],
+        content: [{ type: "text", text: isError ? result : "" }],
       };
     },
   );
-  // Start the server
-  const transport = new StdioServerTransport();
-  // Trick to keep the browser/page context alive until the transport is closed
-  const transportClosed = new Promise<void>((resolve) => {
-    process.stdin.on("close", () => {
-      console.error("MCP server transport closed gracefully.");
-      resolve();
-    });
-    // Watch the parent process, exit once it exits
-    const timer = setInterval(() => {
-      try {
-        process.kill(process.ppid, 0);
-      } catch (error) {
-        // Parent does not exist
-        console.error("Parent process exited, shutting down...");
-        clearInterval(timer);
-        resolve();
-      }
-    }, 1000);
+
+  // --- Configuração HTTP/SSE ---
+  const app = express();
+  let transport: SSEServerTransport | null = null;
+
+  app.get("/sse", async (req, res) => {
+    console.error("Nova conexão SSE estabelecida.");
+    transport = new SSEServerTransport("/messages", res);
+    await server.connect(transport);
   });
-  await server.connect(transport);
-  return transportClosed;
+
+  app.post("/messages", async (req, res) => {
+    if (transport) {
+      await transport.handlePostMessage(req, res);
+    } else {
+      res.status(400).send("Nenhuma conexão SSE ativa.");
+    }
+  });
+
+  const PORT = process.env.PORT || 3000;
+  const httpServer = app.listen(PORT, () => {
+    console.error(`Servidor MCP Mermaider rodando em http://0.0.0.0:${PORT}/sse`);
+  });
+
+  // Mantém o processo rodando até receber um sinal de término
+  return new Promise<void>((resolve) => {
+    process.on('SIGINT', () => { httpServer.close(); resolve(); });
+    process.on('SIGTERM', () => { httpServer.close(); resolve(); });
+  });
 }
